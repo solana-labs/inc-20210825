@@ -14,7 +14,7 @@
           "tokenAddress": bs58_address_string,
           "mintAddress": bs58_address_string,
           "delegateAddress": null / bs58_address_string,
-          "exploitedTransfers": [
+          "delegateTransfers": [
             {
               "transacionID": bs58_signature_string,
               "signer": bs58_pubkey_string,
@@ -63,8 +63,8 @@ foreach wallet in wallets:
         for instruction in instructions:
           if is_spl_token_transfer(instruction):
             if delegate_signed(instruction):
-              let exploited_transfer_entry = new(transaction.id, instruction.signer, instruction.ui_amount)
-              push(token_entry.exploited_tranfers, exploited_transfer_entry)
+              let delegate_transfer_entry = new(transaction.id, instruction.signer, instruction.ui_amount)
+              push(token_entry.delegate_tranfers, delegate_transfer_entry)
           elif is_spl_token_authorize_owner(instruction):
             let owner_change_entry = new(transaction.id, instruction.signer, instruction.new_delegate)
             push(token_entry.owner_changes, owner_change_entry)
