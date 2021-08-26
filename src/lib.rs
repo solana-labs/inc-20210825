@@ -1,8 +1,8 @@
 use {
+    crate::config::Config,
     solana_account_decoder::UiAccountEncoding,
     solana_client::{
         client_error::Result as ClientResult,
-        rpc_client::RpcClient,
         rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
         rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
     },
@@ -14,7 +14,7 @@ pub mod cleanup;
 pub mod config;
 
 pub fn for_all_spl_token_accounts<F>(
-    rpc_client: &RpcClient,
+    config: &Config,
     wallets: &[&dyn Signer],
     mints: &[Pubkey],
     f: F,
@@ -35,14 +35,15 @@ where
             encoding: Some(UiAccountEncoding::Base64),
             ..RpcAccountInfoConfig::default()
         };
-        let config = RpcProgramAccountsConfig {
+        let get_program_accounts_config = RpcProgramAccountsConfig {
             filters,
             account_config,
             ..RpcProgramAccountsConfig::default()
         };
 
-        rpc_client
-            .get_program_accounts_with_config(&spl_token::id(), config)?
+        config
+            .rpc_client
+            .get_program_accounts_with_config(&spl_token::id(), get_program_accounts_config)?
             .into_iter()
             .filter_map(|(addr, acct)| {
                 let token_account = spl_token::state::Account::unpack(&acct.data).ok();
@@ -61,18 +62,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use solana_client::rpc_client::RpcClient;
     use solana_sdk::signer::null_signer::NullSigner;
     use std::str::FromStr;
 
     #[test]
     fn test_for_all_spl_token_accounts() {
         let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+        let fee_payer = Box::new(NullSigner::new(
+            &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
+        ));
+        let config = Config {
+            rpc_client,
+            fee_payer,
+        };
         let wallet = NullSigner::new(
             &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
         );
         let mint = Pubkey::from_str("4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R").unwrap();
         for_all_spl_token_accounts(
-            &rpc_client,
+            &config,
             &vec![&wallet],
             &[mint],
             |(wallet, address, account)| {

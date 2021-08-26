@@ -38,19 +38,38 @@ fn get_signer(
     matches: &ArgMatches<'_>,
     keypair_path: &str,
     wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
-) -> (Box<dyn Signer>, Pubkey) {
-    let config = SignerFromPathConfig {
-        allow_null_signer: true,
-    };
+    allow_null_signer: bool,
+) -> Box<dyn Signer> {
+    let config = SignerFromPathConfig { allow_null_signer };
     signer_from_path_with_config(matches, keypair_path, "owner", wallet_manager, &config)
-        .map(|s| {
-            let p = s.pubkey();
-            (s, p)
-        })
         .unwrap_or_else(|e| {
             eprintln!("error: {}", e);
             exit(1);
         })
+}
+
+fn get_owners_and_mints(
+    sub_matches: &ArgMatches<'_>,
+    allow_null_signer: bool,
+    wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
+) -> (Vec<Box<dyn Signer>>, Vec<Pubkey>) {
+    let mints = sub_matches
+        .values_of("mint")
+        .unwrap()
+        .map(|k| {
+            k.parse::<Pubkey>().unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
+                exit(1);
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let owners = sub_matches
+        .values_of("owner")
+        .unwrap()
+        .map(|p| get_signer(&sub_matches, p, wallet_manager, allow_null_signer))
+        .collect::<Vec<_>>();
+    (owners, mints)
 }
 
 fn main() {
@@ -132,43 +151,11 @@ fn main() {
 
     match matches.subcommand() {
         ("audit", Some(sub_matches)) => {
-            let mints = sub_matches
-                .values_of("mint")
-                .unwrap()
-                .map(|k| {
-                    k.parse::<Pubkey>().unwrap_or_else(|e| {
-                        eprintln!("error: {}", e);
-                        exit(1);
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            let owners = sub_matches
-                .values_of("owner")
-                .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager).1)
-                .collect::<Vec<_>>();
-
+            let (owners, mints) = get_owners_and_mints(sub_matches, true, &mut wallet_manager);
             audit::run(config, owners, mints);
         }
         ("cleanup", Some(sub_matches)) => {
-            let mints = sub_matches
-                .values_of("mint")
-                .unwrap()
-                .map(|k| {
-                    k.parse::<Pubkey>().unwrap_or_else(|e| {
-                        eprintln!("error: {}", e);
-                        exit(1);
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            let owners = sub_matches
-                .values_of("owner")
-                .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager))
-                .collect::<Vec<_>>();
-
+            let (owners, mints) = get_owners_and_mints(sub_matches, false, &mut wallet_manager);
             cleanup::run(config, owners, mints);
         }
         _ => unreachable!(),
