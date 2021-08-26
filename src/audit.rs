@@ -153,6 +153,12 @@ fn try_to_recognize_and_consume_ix(
                     CONSUMED
                 }
                 "approve" | "approveChecked" => {
+                    let signer = get_as_pubkey(ix_info.unwrap(), "owner");
+                    // anything signed off by current owner isn't harmful
+                    if signer == current_owner {
+                        return IGNORED;
+                    }
+
                     let new_delegate = get_as_pubkey(ix_info.unwrap(), "delegate");
                     token_account_entry
                         .all_delegate_addresses
@@ -160,7 +166,7 @@ fn try_to_recognize_and_consume_ix(
                     token_account_entry.delegate_changes.push(DelegateChange {
                         slot,
                         transaction_id: sig,
-                        signer: get_as_pubkey(ix_info.unwrap(), "owner"),
+                        signer,
                         new_delegate,
                     });
                     CONSUMED
@@ -170,11 +176,17 @@ fn try_to_recognize_and_consume_ix(
                         Some(serde_json::value::Value::String(authority_type)) => {
                             match authority_type.as_ref() {
                                 "accountOwner" => {
+                                    let signer = get_as_pubkey(ix_info.unwrap(), "authority");
+                                    // anything signed off by current owner isn't harmful
+                                    if signer == current_owner {
+                                        return IGNORED;
+                                    }
+
                                     token_account_entry.owner_changes.push(OwnerChange {
                                         slot,
                                         transaction_id: sig,
                                         new_owner: get_as_pubkey(ix_info.unwrap(), "newAuthority"),
-                                        signer: get_as_pubkey(ix_info.unwrap(), "authority"),
+                                        signer,
                                     });
                                     CONSUMED
                                 }
