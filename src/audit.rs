@@ -77,6 +77,7 @@ fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
 }
 
 fn try_to_recognize_and_consume_ix(
+    current_owner: Pubkey,
     reported_token_address: Pubkey,
     token_account_entry: &mut TokenAccountEntry,
     sig: Signature,
@@ -91,7 +92,21 @@ fn try_to_recognize_and_consume_ix(
             match ix_type.as_ref() {
                 "transfer" | "transferChecked" => {
                     let source_address = get_as_pubkey(ix_info.unwrap(), "source");
+                    let destination_address = get_as_pubkey(ix_info.unwrap(), "destination");
+                    if source_address != reported_token_address && destination_address != reported_token_address {
+                        // irrelevant transfer instruction (ixes can be mixed arbitrarily)
+                        return IGNORED;
+                    }
+
                     if source_address != reported_token_address {
+                        assert_eq!(destination_address, reported_token_address);
+                        // transfer incming into reported_token_address isn't harmful
+                        return IGNORED;
+                    }
+
+                    let signer = get_as_pubkey(ix_info.unwrap(), "authority");
+                    // anything signed off by current owner isn't harmful
+                    if signer == current_owner {
                         return IGNORED;
                     }
 
@@ -99,7 +114,7 @@ fn try_to_recognize_and_consume_ix(
                         .possible_delegate_transfers
                         .push(DelegateTransfer {
                             transaction_id: sig,
-                            signer: get_as_pubkey(ix_info.unwrap(), "authority"),
+                            signer,
                             // TODO: todo: properly handle this field!
                             amount: format!(
                                 "{}",
@@ -274,6 +289,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                             }
                             token_account_entry.scanned_spl_token_ix_count += 1;
                             try_to_recognize_and_consume_ix(
+                                owner_pubkey,
                                 *reported_token_address,
                                 &mut token_account_entry,
                                 sig,
