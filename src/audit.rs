@@ -44,6 +44,10 @@ struct TokenAccountEntry {
     mint: Pubkey,
     // TODO: intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the latest delegate_address
     //delegate_address: Option<Pubkey>
+    total_tx_count: usize,
+    scanned_tx_count: usize,
+    scanned_spl_token_ix_count: usize,
+    failed_tx_count: usize,
     delegate_transfers: Vec<DelegateTransfer>,
     owner_changes: Vec<OwnerChange>,
     delegate_changes: Vec<DelegateChange>,
@@ -64,7 +68,11 @@ struct Report {
     wallets: HashMap<Pubkey, TokenAccountEntry>, // key = token address
 }
 
-fn try_to_recognize_and_consume_ix(token_account: &mut TokenAccountEntry, sig: Signature, ix: &serde_json::Value) -> bool {
+fn try_to_recognize_and_consume_ix(
+    token_account: &mut TokenAccountEntry,
+    sig: Signature,
+    ix: &serde_json::Value,
+) -> bool {
     const CONSUMED: bool = false;
     const IGNORED: bool = false;
 
@@ -165,6 +173,8 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                 };
 
                 // Exclude any transactions which failed
+                let total_sig_len = sigs.len();
+                token_account_entry.total_tx_count += total_sig_len;
                 let sigs = sigs.iter().filter_map(|sig_with_status| {
                     if sig_with_status.err.is_some() {
                         None
@@ -172,6 +182,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                         Signature::from_str(sig_with_status.signature.as_str()).ok()
                     }
                 });
+                token_account_entry.failed_tx_count += total_sig_len - sigs.clone().count();
 
                 for sig in sigs {
                     #[allow(deprecated)]
@@ -200,6 +211,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                     }
 
                     // only spl token instructions will be parsed
+                    let mut new_ix_in_tx = true;
                     instructions
                         .into_iter()
                         .filter_map(|ix| {
@@ -218,7 +230,14 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                             }
                         })
                         // program_id must be the tokenkeg according the previous .filter_map()
-                        .filter(|(_program_id, ix)| try_to_recognize_and_consume_ix(&mut token_account_entry, sig, ix))
+                        .filter(|(_program_id, ix)| {
+                            if new_ix_in_tx {
+                                new_ix_in_tx = false;
+                                token_account_entry.scanned_tx_count += 1;
+                            }
+                            token_account_entry.scanned_spl_token_ix_count += 1;
+                            try_to_recognize_and_consume_ix(&mut token_account_entry, sig, ix)
+                        })
                         .for_each(|(program_id, ix)| {
                             dbg!(("unknown instruction!", program_id, ix));
                         });
