@@ -11,7 +11,7 @@ fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Acco
     if let COption::Some(delegate) = account.delegate {
         println!("revoking delegate {} for account {}", delegate, address);
         let rpc_client = &config.rpc_client;
-        let revoke_ix = revoke(&spl_token::id(), &address, &owner.pubkey(), &[]).unwrap();
+        let revoke_ix = revoke(&spl_token::id(), address, &owner.pubkey(), &[]).unwrap();
         let fee_payer = config.fee_payer.pubkey();
         let message = Message::new(&[revoke_ix], Some(&fee_payer));
         let (blockhash, fee_calculator) = rpc_client.get_recent_blockhash().unwrap();
@@ -69,7 +69,7 @@ mod tests {
             verbose: true,
         };
         let account = Account {
-            mint: mint.clone(),
+            mint,
             owner: wallet.pubkey(),
             amount: 10,
             delegate: COption::Some(delegate),

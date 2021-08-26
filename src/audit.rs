@@ -10,7 +10,7 @@ use {
         EncodedTransaction, EncodedTransactionWithStatusMeta, UiInstruction, UiMessage,
         UiParsedInstruction, UiTransactionEncoding,
     },
-    std::{collections::HashMap, str::FromStr},
+    std::str::FromStr,
 };
 
 fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
@@ -123,7 +123,7 @@ fn try_to_recognize_and_consume_ix(
                     let new_delegate = get_as_pubkey(ix_info.unwrap(), "delegate");
                     token_account_entry
                         .all_delegate_addresses
-                        .insert(new_delegate.clone());
+                        .insert(new_delegate);
                     token_account_entry.delegate_changes.push(DelegateChange {
                         slot,
                         transaction_id: sig,
@@ -177,9 +177,7 @@ fn try_to_recognize_and_consume_ix(
 
 pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
     println!("audit");
-    let mut report = Report {
-        entries_by_token_address: HashMap::new(),
-    };
+    let mut report = Report::new();
     const SIGNATURES_LIMIT: usize = 1000;
     crate::for_all_spl_token_accounts(
         &config,
@@ -203,7 +201,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                 #[allow(deprecated)]
                 let sigs = rpc_client
                     .get_confirmed_signatures_for_address2_with_config(
-                        &reported_token_address,
+                        reported_token_address,
                         request_config,
                     )
                     .unwrap();
@@ -305,6 +303,9 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
     )
     .unwrap();
 
-    // nicely format! or csv?
-    dbg!(report);
+    report.summary(std::io::stdout()).unwrap();
+    if config.verbose {
+        println!();
+        report.detail(std::io::stdout()).unwrap();
+    }
 }

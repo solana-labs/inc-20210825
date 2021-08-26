@@ -58,7 +58,7 @@ fn get_owners_and_mints(
         .unwrap()
         .map(|p| {
             get_signer(
-                &sub_matches,
+                sub_matches,
                 p,
                 wallet_manager,
                 /* allow_null_signer = */ true,
@@ -70,7 +70,7 @@ fn get_owners_and_mints(
     let owners = sub_matches
         .values_of("owner")
         .unwrap()
-        .map(|p| get_signer(&sub_matches, p, wallet_manager, allow_null_signer))
+        .map(|p| get_signer(sub_matches, p, wallet_manager, allow_null_signer))
         .collect::<Vec<_>>();
     (owners, mints)
 }
