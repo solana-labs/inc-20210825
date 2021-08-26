@@ -76,14 +76,14 @@ fn scan_ix(token_account: &mut TokenAccountEntry, sig: Signature, ix: &serde_jso
                     token_account.delegate_transfers.push(DelegateTransfer {
                         transaction_id: sig,
                         signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
+                        // TODO: todo: properly handle this field!
                         amount: format!(
                             "{}",
                             ix_info
                                 .unwrap()
                                 .get("tokenAmount")
-                                .unwrap()
-                                .get("uiAmountString")
-                                .unwrap()
+                                .map(|ta| ta.get("uiAmountString").unwrap())
+                                .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
                         ),
                     });
                     CONSUMED
