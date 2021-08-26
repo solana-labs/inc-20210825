@@ -20,7 +20,7 @@ pub fn for_all_spl_token_accounts<F>(
     f: F,
 ) -> ClientResult<()>
 where
-    F: FnMut((&&dyn Signer, Pubkey, spl_token::state::Account)) + Copy,
+    F: FnMut((&Config, &dyn Signer, Pubkey, spl_token::state::Account)) + Copy,
 {
     for wallet in wallets {
         let filters = Some(vec![
@@ -53,7 +53,7 @@ where
                 Some(addr).zip(token_account)
             })
             .filter(|(_address, account)| mints.contains(&account.mint))
-            .map(|(address, account)| (wallet, address, account))
+            .map(|(address, account)| (config, *wallet, address, account))
             .for_each(f);
     }
     Ok(())
@@ -82,9 +82,9 @@ mod tests {
         let mint = Pubkey::from_str("4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R").unwrap();
         for_all_spl_token_accounts(
             &config,
-            &vec![&wallet],
+            &[&wallet],
             &[mint],
-            |(wallet, address, account)| {
+            |(_config, wallet, address, account)| {
                 println!(
                     "owner: {}\naddress: {}\naccount: {:?}",
                     wallet.pubkey(),
