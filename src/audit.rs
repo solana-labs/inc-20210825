@@ -2,7 +2,7 @@ use {
     crate::config::Config,
     serde::{Deserialize, Serialize},
     solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config,
-    solana_sdk::{pubkey::Pubkey, signature::Signature, signer::Signer, clock::Slot},
+    solana_sdk::{clock::Slot, pubkey::Pubkey, signature::Signature, signer::Signer},
     solana_transaction_status::{
         EncodedTransaction, EncodedTransactionWithStatusMeta, UiInstruction, UiMessage,
         UiParsedInstruction, UiTransactionEncoding,
@@ -16,6 +16,7 @@ struct DelegateTransfer {
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub amount: String,
+    pub original_ix: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -24,6 +25,7 @@ struct DelegateBurn {
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub amount: String,
+    pub original_ix: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -32,6 +34,7 @@ struct OwnerChange {
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub new_owner: Pubkey,
+    pub original_ix: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -40,6 +43,7 @@ struct DelegateChange {
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub new_delegate: Pubkey,
+    pub original_ix: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -83,6 +87,7 @@ fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
 fn try_to_recognize_and_consume_ix(
     current_owner: Pubkey,
     reported_token_address: Pubkey,
+    _reported_token_mint: Pubkey,
     token_account_entry: &mut TokenAccountEntry,
     slot: Slot,
     sig: Signature,
@@ -98,7 +103,9 @@ fn try_to_recognize_and_consume_ix(
                 "transfer" | "transferChecked" => {
                     let source_address = get_as_pubkey(ix_info.unwrap(), "source");
                     let destination_address = get_as_pubkey(ix_info.unwrap(), "destination");
-                    if source_address != reported_token_address && destination_address != reported_token_address {
+                    if source_address != reported_token_address
+                        && destination_address != reported_token_address
+                    {
                         // irrelevant transfer instruction (ixes can be mixed arbitrarily)
                         return IGNORED;
                     }
@@ -115,6 +122,13 @@ fn try_to_recognize_and_consume_ix(
                         return IGNORED;
                     }
 
+                    // unrelated mint; well no-checked ixes doens't have mint....
+                    //dbg!(&ix);
+                    //let mint = get_as_pubkey(ix_info.unwrap(), "mint");
+                    //if mint != reported_token_mint {
+                    //    return IGNORED;
+                    //}
+
                     token_account_entry
                         .possible_delegate_transfers
                         .push(DelegateTransfer {
@@ -130,10 +144,17 @@ fn try_to_recognize_and_consume_ix(
                                     .map(|ta| ta.get("uiAmountString").unwrap())
                                     .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
                             ),
+                            original_ix: format!("{}", ix),
                         });
                     CONSUMED
                 }
                 "burn" | "burnChecked" => {
+                    let token_address = get_as_pubkey(ix_info.unwrap(), "account");
+                    if token_address != reported_token_address {
+                        // unrelated burns
+                        return IGNORED;
+                    }
+
                     token_account_entry
                         .possible_delegate_burns
                         .push(DelegateBurn {
@@ -149,6 +170,7 @@ fn try_to_recognize_and_consume_ix(
                                     .map(|ta| ta.get("uiAmountString").unwrap())
                                     .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
                             ),
+                            original_ix: format!("{}", ix),
                         });
                     CONSUMED
                 }
@@ -156,6 +178,12 @@ fn try_to_recognize_and_consume_ix(
                     let signer = get_as_pubkey(ix_info.unwrap(), "owner");
                     // anything signed off by current owner isn't harmful
                     if signer == current_owner {
+                        return IGNORED;
+                    }
+
+                    let token_address = get_as_pubkey(ix_info.unwrap(), "source");
+                    if token_address != reported_token_address {
+                        // unrelated approvals
                         return IGNORED;
                     }
 
@@ -168,6 +196,7 @@ fn try_to_recognize_and_consume_ix(
                         transaction_id: sig,
                         signer,
                         new_delegate,
+                        original_ix: format!("{}", ix),
                     });
                     CONSUMED
                 }
@@ -182,11 +211,18 @@ fn try_to_recognize_and_consume_ix(
                                         return IGNORED;
                                     }
 
+                                    let token_address = get_as_pubkey(ix_info.unwrap(), "account");
+                                    if token_address != reported_token_address {
+                                        // unrelated authorizations
+                                        return IGNORED;
+                                    }
+
                                     token_account_entry.owner_changes.push(OwnerChange {
                                         slot,
                                         transaction_id: sig,
                                         new_owner: get_as_pubkey(ix_info.unwrap(), "newAuthority"),
                                         signer,
+                                        original_ix: format!("{}", ix),
                                     });
                                     CONSUMED
                                 }
@@ -198,6 +234,7 @@ fn try_to_recognize_and_consume_ix(
                 }
                 "initializeAccount" | "closeAccount" => IGNORED,
                 "mintTo" | "mintToChecked" => IGNORED,
+                "revoke" => IGNORED, // TODO: this could be useful to create a nicely-looking post-incident report?
                 _ => !CONSUMED,
             }
         }
@@ -263,7 +300,8 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                         .get_confirmed_transaction(&sig, UiTransactionEncoding::JsonParsed)
                         .unwrap();
                     let slot = confirmation.slot;
-                    let EncodedTransactionWithStatusMeta { transaction, meta } = confirmation.transaction;
+                    let EncodedTransactionWithStatusMeta { transaction, meta } =
+                        confirmation.transaction;
                     let inner_ix = meta.and_then(|meta| {
                         meta.inner_instructions
                             .map(|ixs| ixs.into_iter().map(|ixs| ixs.instructions).flatten())
@@ -312,6 +350,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                             try_to_recognize_and_consume_ix(
                                 owner_pubkey,
                                 *reported_token_address,
+                                account.mint,
                                 &mut token_account_entry,
                                 slot,
                                 sig,
