@@ -119,14 +119,14 @@ fn try_to_recognize_and_consume_ix(
                     CONSUMED
                 }
                 "approve" | "approveChecked" => {
-                    let signer = format!("{}", ix_info.unwrap().get("owner").unwrap());
+                    let new_delegate = format!("{}", ix_info.unwrap().get("delegate").unwrap());
                     token_account_entry
                         .all_delegate_addresses
-                        .insert(signer.clone());
+                        .insert(new_delegate.clone());
                     token_account_entry.delegate_changes.push(DelegateChange {
                         transaction_id: sig,
-                        signer: signer,
-                        new_delegate: format!("{}", ix_info.unwrap().get("delegate").unwrap()),
+                        signer: format!("{}", ix_info.unwrap().get("owner").unwrap()),
+                        new_delegate,
                     });
                     CONSUMED
                 }
