@@ -13,38 +13,38 @@ use {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateTransfer {
     pub transaction_id: Signature,
-    pub signer: String, // was Pubkey
+    pub signer: Pubkey,
     pub amount: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateBurn {
     pub transaction_id: Signature,
-    pub signer: String, // was Pubkey
+    pub signer: Pubkey,
     pub amount: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct OwnerChange {
     pub transaction_id: Signature,
-    pub signer: String,    // was Pubkey
-    pub new_owner: String, // was Pubkey
+    pub signer: Pubkey,
+    pub new_owner: Pubkey,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateChange {
     pub transaction_id: Signature,
-    pub signer: String,       // was Pubkey
-    pub new_delegate: String, // was Option<Pubkey>
+    pub signer: Pubkey,
+    pub new_delegate: Pubkey,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct TokenAccountEntry {
-    owner: Pubkey,
+    current_owner: Pubkey,
     mint: Pubkey,
     // intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the
     // latest delegate_address, so we need to collect them all and detect possible attempts later
-    all_delegate_addresses: std::collections::BTreeSet<String>,
+    all_delegate_addresses: std::collections::BTreeSet<Pubkey>,
     total_tx_count: usize,
     scanned_tx_count: usize,
     scanned_spl_token_ix_count: usize,
@@ -56,9 +56,9 @@ struct TokenAccountEntry {
 }
 
 impl TokenAccountEntry {
-    pub fn new(owner: Pubkey, mint: Pubkey) -> Self {
+    pub fn new(current_owner: Pubkey, mint: Pubkey) -> Self {
         Self {
-            owner,
+            current_owner,
             mint,
             ..Self::default()
         }
@@ -69,7 +69,11 @@ impl TokenAccountEntry {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct Report {
-    wallets: HashMap<Pubkey, TokenAccountEntry>, // key = token address
+    entries_by_token_address: HashMap<Pubkey, TokenAccountEntry>,
+}
+
+fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
+    Pubkey::from_str(json_value.get(field_name).unwrap().as_str().unwrap()).unwrap()
 }
 
 fn try_to_recognize_and_consume_ix(
@@ -81,15 +85,15 @@ fn try_to_recognize_and_consume_ix(
     const IGNORED: bool = false;
 
     match ix.get("type").as_ref() {
-        Some(serde_json::value::Value::String(a)) => {
+        Some(serde_json::value::Value::String(ix_type)) => {
             let ix_info = ix.get("info");
-            match a.as_ref() {
+            match ix_type.as_ref() {
                 "transfer" | "transferChecked" => {
                     token_account_entry
                         .delegate_transfers
                         .push(DelegateTransfer {
                             transaction_id: sig,
-                            signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
+                            signer: get_as_pubkey(ix_info.unwrap(), "authority"),
                             // TODO: todo: properly handle this field!
                             amount: format!(
                                 "{}",
@@ -105,7 +109,7 @@ fn try_to_recognize_and_consume_ix(
                 "burn" | "burnChecked" => {
                     token_account_entry.delegate_burns.push(DelegateBurn {
                         transaction_id: sig,
-                        signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
+                        signer: get_as_pubkey(ix_info.unwrap(), "authority"),
                         // TODO: todo: properly handle this field!
                         amount: format!(
                             "{}",
@@ -119,40 +123,36 @@ fn try_to_recognize_and_consume_ix(
                     CONSUMED
                 }
                 "approve" | "approveChecked" => {
-                    let new_delegate = format!("{}", ix_info.unwrap().get("delegate").unwrap());
+                    let new_delegate = get_as_pubkey(ix_info.unwrap(), "delegate");
                     token_account_entry
                         .all_delegate_addresses
                         .insert(new_delegate.clone());
                     token_account_entry.delegate_changes.push(DelegateChange {
                         transaction_id: sig,
-                        signer: format!("{}", ix_info.unwrap().get("owner").unwrap()),
+                        signer: get_as_pubkey(ix_info.unwrap(), "owner"),
                         new_delegate,
                     });
                     CONSUMED
                 }
                 "setAuthority" => {
                     match (ix_info.map(|info| info.get("authorityType").unwrap())).as_ref() {
-                        Some(serde_json::value::Value::String(a)) => match a.as_ref() {
-                            "accountOwner" => {
-                                token_account_entry.owner_changes.push(OwnerChange {
-                                    transaction_id: sig,
-                                    new_owner: format!(
-                                        "{}",
-                                        ix_info.unwrap().get("newAuthority").unwrap()
-                                    ),
-                                    signer: format!(
-                                        "{}",
-                                        ix_info.unwrap().get("authority").unwrap()
-                                    ),
-                                });
-                                CONSUMED
+                        Some(serde_json::value::Value::String(authority_type)) => {
+                            match authority_type.as_ref() {
+                                "accountOwner" => {
+                                    token_account_entry.owner_changes.push(OwnerChange {
+                                        transaction_id: sig,
+                                        new_owner: get_as_pubkey(ix_info.unwrap(), "newAuthority"),
+                                        signer: get_as_pubkey(ix_info.unwrap(), "authority"),
+                                    });
+                                    CONSUMED
+                                }
+                                _ => !CONSUMED,
                             }
-                            _ => !CONSUMED,
-                        },
+                        }
                         _ => !CONSUMED,
                     }
                 }
-                "initializeAccount" => IGNORED,
+                "initializeAccount" | "closeAccount" => IGNORED,
                 "mintTo" | "mintToChecked" => IGNORED,
                 _ => !CONSUMED,
             }
@@ -164,7 +164,7 @@ fn try_to_recognize_and_consume_ix(
 pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
     println!("audit");
     let mut report = Report {
-        wallets: HashMap::new(),
+        entries_by_token_address: HashMap::new(),
     };
     const SIGNATURES_LIMIT: usize = 1000;
     crate::for_all_spl_token_accounts(
@@ -175,7 +175,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
             let rpc_client = &config.rpc_client;
             let owner_pubkey = owner.pubkey();
             let mut token_account_entry = report
-                .wallets
+                .entries_by_token_address
                 //.entry((owner_pubkey, account.mint))
                 .entry(*address)
                 .or_insert_with(|| TokenAccountEntry::new(owner_pubkey, account.mint));
