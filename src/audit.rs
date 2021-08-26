@@ -49,8 +49,8 @@ struct TokenAccountEntry {
     scanned_tx_count: usize,
     scanned_spl_token_ix_count: usize,
     failed_tx_count: usize,
-    delegate_transfers: Vec<DelegateTransfer>,
-    delegate_burns: Vec<DelegateBurn>,
+    possible_delegate_transfers: Vec<DelegateTransfer>,
+    possible_delegate_burns: Vec<DelegateBurn>,
     owner_changes: Vec<OwnerChange>,
     delegate_changes: Vec<DelegateChange>,
 }
@@ -77,6 +77,7 @@ fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
 }
 
 fn try_to_recognize_and_consume_ix(
+    reported_token_address: Pubkey,
     token_account_entry: &mut TokenAccountEntry,
     sig: Signature,
     ix: &serde_json::Value,
@@ -89,8 +90,13 @@ fn try_to_recognize_and_consume_ix(
             let ix_info = ix.get("info");
             match ix_type.as_ref() {
                 "transfer" | "transferChecked" => {
+                    let source_address = get_as_pubkey(ix_info.unwrap(), "source");
+                    if source_address != reported_token_address {
+                        return IGNORED;
+                    }
+
                     token_account_entry
-                        .delegate_transfers
+                        .possible_delegate_transfers
                         .push(DelegateTransfer {
                             transaction_id: sig,
                             signer: get_as_pubkey(ix_info.unwrap(), "authority"),
@@ -107,19 +113,21 @@ fn try_to_recognize_and_consume_ix(
                     CONSUMED
                 }
                 "burn" | "burnChecked" => {
-                    token_account_entry.delegate_burns.push(DelegateBurn {
-                        transaction_id: sig,
-                        signer: get_as_pubkey(ix_info.unwrap(), "authority"),
-                        // TODO: todo: properly handle this field!
-                        amount: format!(
-                            "{}",
-                            ix_info
-                                .unwrap()
-                                .get("tokenAmount")
-                                .map(|ta| ta.get("uiAmountString").unwrap())
-                                .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
-                        ),
-                    });
+                    token_account_entry
+                        .possible_delegate_burns
+                        .push(DelegateBurn {
+                            transaction_id: sig,
+                            signer: get_as_pubkey(ix_info.unwrap(), "authority"),
+                            // TODO: todo: properly handle this field!
+                            amount: format!(
+                                "{}",
+                                ix_info
+                                    .unwrap()
+                                    .get("tokenAmount")
+                                    .map(|ta| ta.get("uiAmountString").unwrap())
+                                    .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
+                            ),
+                        });
                     CONSUMED
                 }
                 "approve" | "approveChecked" => {
@@ -171,13 +179,13 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
         &config,
         owners.as_slice(),
         mints.as_slice(),
-        |config, owner, address, account| {
+        |config, owner, reported_token_address, account| {
             let rpc_client = &config.rpc_client;
             let owner_pubkey = owner.pubkey();
             let mut token_account_entry = report
                 .entries_by_token_address
                 //.entry((owner_pubkey, account.mint))
-                .entry(*address)
+                .entry(*reported_token_address)
                 .or_insert_with(|| TokenAccountEntry::new(owner_pubkey, account.mint));
             let mut before = Option::<Signature>::None;
             loop {
@@ -188,7 +196,10 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                 };
                 #[allow(deprecated)]
                 let sigs = rpc_client
-                    .get_confirmed_signatures_for_address2_with_config(&address, request_config)
+                    .get_confirmed_signatures_for_address2_with_config(
+                        &reported_token_address,
+                        request_config,
+                    )
                     .unwrap();
 
                 before = if sigs.len() < SIGNATURES_LIMIT {
@@ -262,7 +273,12 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                                 token_account_entry.scanned_tx_count += 1;
                             }
                             token_account_entry.scanned_spl_token_ix_count += 1;
-                            try_to_recognize_and_consume_ix(&mut token_account_entry, sig, ix)
+                            try_to_recognize_and_consume_ix(
+                                *reported_token_address,
+                                &mut token_account_entry,
+                                sig,
+                                ix,
+                            )
                         })
                         .for_each(|(program_id, ix)| {
                             dbg!(("unknown instruction!", program_id, ix));
