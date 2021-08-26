@@ -2,7 +2,7 @@ use {
     crate::config::Config,
     serde::{Deserialize, Serialize},
     solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config,
-    solana_sdk::{pubkey::Pubkey, signature::Signature, signer::Signer},
+    solana_sdk::{pubkey::Pubkey, signature::Signature, signer::Signer, clock::Slot},
     solana_transaction_status::{
         EncodedTransaction, EncodedTransactionWithStatusMeta, UiInstruction, UiMessage,
         UiParsedInstruction, UiTransactionEncoding,
@@ -12,6 +12,7 @@ use {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateTransfer {
+    pub slot: Slot,
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub amount: String,
@@ -19,6 +20,7 @@ struct DelegateTransfer {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateBurn {
+    pub slot: Slot,
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub amount: String,
@@ -26,6 +28,7 @@ struct DelegateBurn {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct OwnerChange {
+    pub slot: Slot,
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub new_owner: Pubkey,
@@ -33,6 +36,7 @@ struct OwnerChange {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateChange {
+    pub slot: Slot,
     pub transaction_id: Signature,
     pub signer: Pubkey,
     pub new_delegate: Pubkey,
@@ -80,6 +84,7 @@ fn try_to_recognize_and_consume_ix(
     current_owner: Pubkey,
     reported_token_address: Pubkey,
     token_account_entry: &mut TokenAccountEntry,
+    slot: Slot,
     sig: Signature,
     ix: &serde_json::Value,
 ) -> bool {
@@ -113,6 +118,7 @@ fn try_to_recognize_and_consume_ix(
                     token_account_entry
                         .possible_delegate_transfers
                         .push(DelegateTransfer {
+                            slot,
                             transaction_id: sig,
                             signer,
                             // TODO: todo: properly handle this field!
@@ -131,6 +137,7 @@ fn try_to_recognize_and_consume_ix(
                     token_account_entry
                         .possible_delegate_burns
                         .push(DelegateBurn {
+                            slot,
                             transaction_id: sig,
                             signer: get_as_pubkey(ix_info.unwrap(), "authority"),
                             // TODO: todo: properly handle this field!
@@ -151,6 +158,7 @@ fn try_to_recognize_and_consume_ix(
                         .all_delegate_addresses
                         .insert(new_delegate.clone());
                     token_account_entry.delegate_changes.push(DelegateChange {
+                        slot,
                         transaction_id: sig,
                         signer: get_as_pubkey(ix_info.unwrap(), "owner"),
                         new_delegate,
@@ -163,6 +171,7 @@ fn try_to_recognize_and_consume_ix(
                             match authority_type.as_ref() {
                                 "accountOwner" => {
                                     token_account_entry.owner_changes.push(OwnerChange {
+                                        slot,
                                         transaction_id: sig,
                                         new_owner: get_as_pubkey(ix_info.unwrap(), "newAuthority"),
                                         signer: get_as_pubkey(ix_info.unwrap(), "authority"),
@@ -238,11 +247,11 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
 
                 for sig in sigs {
                     #[allow(deprecated)]
-                    let transaction = rpc_client
+                    let confirmation = rpc_client
                         .get_confirmed_transaction(&sig, UiTransactionEncoding::JsonParsed)
-                        .unwrap()
-                        .transaction;
-                    let EncodedTransactionWithStatusMeta { transaction, meta } = transaction;
+                        .unwrap();
+                    let slot = confirmation.slot;
+                    let EncodedTransactionWithStatusMeta { transaction, meta } = confirmation.transaction;
                     let inner_ix = meta.and_then(|meta| {
                         meta.inner_instructions
                             .map(|ixs| ixs.into_iter().map(|ixs| ixs.instructions).flatten())
@@ -292,6 +301,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                                 owner_pubkey,
                                 *reported_token_address,
                                 &mut token_account_entry,
+                                slot,
                                 sig,
                                 ix,
                             )
