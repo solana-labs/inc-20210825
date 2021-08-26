@@ -13,6 +13,13 @@ use {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateTransfer {
     pub transaction_id: Signature,
+    pub signer: String, // was Pubkey
+    pub amount: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct DelegateBurn {
+    pub transaction_id: Signature,
     pub signer: Pubkey,
     pub amount: String,
 }
@@ -20,32 +27,33 @@ struct DelegateTransfer {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct OwnerChange {
     pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub new_owner: Pubkey,
+    pub signer: String,    // was Pubkey
+    pub new_owner: String, // was Pubkey
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateChange {
     pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub new_delegate: Option<Pubkey>,
+    pub signer: String,       // was Pubkey
+    pub new_delegate: String, // was Option<Pubkey>
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct TokenAccountEntry {
-    token_account_address: Pubkey,
-    mint_address: Pubkey,
-    delegate_address: Option<Pubkey>,
+    owner: Pubkey,
+    mint: Pubkey,
+    // TODO: intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the latest delegate_address
+    //delegate_address: Option<Pubkey>
     delegate_transfers: Vec<DelegateTransfer>,
     owner_changes: Vec<OwnerChange>,
     delegate_changes: Vec<DelegateChange>,
 }
 
 impl TokenAccountEntry {
-    pub fn new(token_account_address: Pubkey, mint_address: Pubkey) -> Self {
+    pub fn new(owner: Pubkey, mint: Pubkey) -> Self {
         Self {
-            token_account_address,
-            mint_address,
+            owner,
+            mint,
             ..Self::default()
         }
     }
@@ -53,7 +61,70 @@ impl TokenAccountEntry {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct Report {
-    wallets: HashMap<Pubkey, TokenAccountEntry>,
+    wallets: HashMap<Pubkey, TokenAccountEntry>, // key = token address
+}
+
+fn scan_ix(token_account: &mut TokenAccountEntry, sig: Signature, ix: &serde_json::Value) -> bool {
+    const CONSUMED: bool = false;
+    const IGNORED: bool = false;
+
+    match ix.get("type").as_ref() {
+        Some(serde_json::value::Value::String(a)) => {
+            let ix_info = ix.get("info");
+            match a.as_ref() {
+                "transfer" | "transferChecked" => {
+                    token_account.delegate_transfers.push(DelegateTransfer {
+                        transaction_id: sig,
+                        signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
+                        amount: format!(
+                            "{}",
+                            ix_info
+                                .unwrap()
+                                .get("tokenAmount")
+                                .unwrap()
+                                .get("uiAmountString")
+                                .unwrap()
+                        ),
+                    });
+                    CONSUMED
+                }
+                "approve" | "approveChecked" => {
+                    token_account.delegate_changes.push(DelegateChange {
+                        transaction_id: sig,
+                        signer: format!("{}", ix_info.unwrap().get("owner").unwrap()),
+                        new_delegate: format!("{}", ix_info.unwrap().get("delegate").unwrap()),
+                    });
+                    CONSUMED
+                }
+                "setAuthority" => {
+                    match (ix_info.map(|info| info.get("authorityType").unwrap())).as_ref() {
+                        Some(serde_json::value::Value::String(a)) => match a.as_ref() {
+                            "accountOwner" => {
+                                token_account.owner_changes.push(OwnerChange {
+                                    transaction_id: sig,
+                                    new_owner: format!(
+                                        "{}",
+                                        ix_info.unwrap().get("newAuthority").unwrap()
+                                    ),
+                                    signer: format!(
+                                        "{}",
+                                        ix_info.unwrap().get("authority").unwrap()
+                                    ),
+                                });
+                                CONSUMED
+                            }
+                            _ => !CONSUMED,
+                        },
+                        _ => !CONSUMED,
+                    }
+                }
+                "initializeAccount" => IGNORED,
+                "mintTo" | "mintToChecked" => IGNORED,
+                _ => !CONSUMED,
+            }
+        }
+        _ => !CONSUMED,
+    }
 }
 
 pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
@@ -69,10 +140,11 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
         |config, owner, address, account| {
             let rpc_client = &config.rpc_client;
             let owner_pubkey = owner.pubkey();
-            let wallet_entry = report
+            let mut token_account_entry = report
                 .wallets
-                .entry(owner_pubkey)
-                .or_insert_with(|| TokenAccountEntry::new(*address, account.mint));
+                //.entry((owner_pubkey, account.mint))
+                .entry(*address)
+                .or_insert_with(|| TokenAccountEntry::new(owner_pubkey, account.mint));
             let mut before = Option::<Signature>::None;
             loop {
                 let request_config = GetConfirmedSignaturesForAddress2Config {
@@ -92,6 +164,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                         .and_then(|s| Signature::from_str(s.signature.as_str()).ok())
                 };
 
+                // Exclude any transactions which failed
                 let sigs = sigs.iter().filter_map(|sig_with_status| {
                     if sig_with_status.err.is_some() {
                         None
@@ -126,8 +199,8 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                         instructions.extend(inner_ix);
                     }
 
-                    // spl token instructions will be parsed
-                    let instructions = instructions
+                    // only spl token instructions will be parsed
+                    instructions
                         .into_iter()
                         .filter_map(|ix| {
                             if let UiInstruction::Parsed(UiParsedInstruction::Parsed(instruction)) =
@@ -144,7 +217,11 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                                 None
                             }
                         })
-                        .for_each(|(pid, ix)| println!("{:?}", ix));
+                        // program_id must be the tokenkeg according the previous .filter_map()
+                        .filter(|(_program_id, ix)| scan_ix(&mut token_account_entry, sig, ix))
+                        .for_each(|(program_id, ix)| {
+                            dbg!(("unknown instruction!", program_id, ix));
+                        });
                 }
 
                 // last
@@ -155,4 +232,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
         },
     )
     .unwrap();
+
+    // nicely format! or csv?
+    dbg!(report);
 }
