@@ -75,6 +75,8 @@ mod tests {
         let config = Config {
             rpc_client,
             fee_payer,
+            dry_run: true,
+            verbose: true,
         };
         let wallet = NullSigner::new(
             &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
@@ -82,7 +84,7 @@ mod tests {
         let mint = Pubkey::from_str("4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R").unwrap();
         for_all_spl_token_accounts(
             &config,
-            &[&wallet],
+            &[Box::new(wallet)],
             &[mint],
             |(_config, wallet, address, account)| {
                 println!(

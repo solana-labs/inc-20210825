@@ -17,18 +17,21 @@ fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Acco
         let (blockhash, fee_calculator) = rpc_client.get_recent_blockhash().unwrap();
         let fee_payer_balance = rpc_client.get_balance(&fee_payer).unwrap();
         let fee = fee_calculator.calculate_fee(&message);
-        if fee_payer_balance < fee {
-            eprintln!("fee payer ({}) insufficient funds!", fee_payer);
-            std::process::exit(1);
-        }
-        let mut transaction = Transaction::new_unsigned(message);
-        transaction.sign(&[owner, config.fee_payer.as_ref()], blockhash);
+        if !config.dry_run {
+            if fee_payer_balance < fee {
+                eprintln!("fee payer ({}) insufficient funds!", fee_payer);
+                std::process::exit(1);
+            }
 
-        let txid = rpc_client
-            .send_and_confirm_transaction_with_spinner(&transaction)
-            .unwrap();
-        // TODO: print CLI command on failure?
-        println!("txid: {}", txid);
+            let mut transaction = Transaction::new_unsigned(message);
+            transaction.sign(&[owner, config.fee_payer.as_ref()], blockhash);
+
+            match rpc_client.send_and_confirm_transaction_with_spinner(&transaction) {
+                Ok(txid) => println!("txid: {}", txid),
+                Err(error) =>
+                    eprintln!("Error revoking delegate {} for account {}: {}", delegate, address, error),
+            }
+        }
     }
 }
 
@@ -36,4 +39,43 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
     println!("cleanup");
     crate::for_all_spl_token_accounts(&config, owners.as_slice(), mints.as_slice(), cleanup)
         .unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solana_client::rpc_client::RpcClient;
+    use solana_sdk::signer::null_signer::NullSigner;
+    use spl_token::state::AccountState;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_cleanup_delegation() {
+        let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com/".to_string());
+        let wallet = NullSigner::new(
+            &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
+        );
+        let fee_payer = Box::new(NullSigner::new(
+            &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
+        ));
+        let mint = Pubkey::from_str("4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R").unwrap();
+        let delegate = Pubkey::from_str("BaDmyYaaua9k8mZuL53UUt8E6peRMeT3cRVjYcLm68T7").unwrap();
+        let config = Config {
+            rpc_client,
+            fee_payer,
+            dry_run: true,
+            verbose: true,
+        };
+        let account = Account {
+            mint: mint.clone(),
+            owner: wallet.pubkey(),
+            amount: 10,
+            delegate: COption::Some(delegate),
+            state: AccountState::Initialized,
+            is_native: COption::None,
+            delegated_amount: 999,
+            close_authority: COption::None,
+        };
+        cleanup((&config, &wallet, mint, account));
+    }
 }

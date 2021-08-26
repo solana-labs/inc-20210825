@@ -56,12 +56,7 @@ fn get_owners_and_mints(
     let mints = sub_matches
         .values_of("mint")
         .unwrap()
-        .map(|k| {
-            k.parse::<Pubkey>().unwrap_or_else(|e| {
-                eprintln!("error: {}", e);
-                exit(1);
-            })
-        })
+        .map(|p| get_signer(&sub_matches, p, wallet_manager, /* allow_null_signer = */ true).pubkey())
         .collect::<Vec<_>>();
 
     let owners = sub_matches
@@ -89,6 +84,21 @@ fn main() {
                 arg
             }
         })
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .takes_value(false)
+                .global(true)
+                .help("Show additional information"),
+        )
+        .arg(
+            Arg::with_name("dry_run")
+                .long("dry-run")
+                .takes_value(false)
+                .global(true)
+                .help("Do all processing without sending transactions"),
+        )
         .arg(
             Arg::with_name("json_rpc_url")
                 .short("u")
@@ -146,6 +156,8 @@ fn main() {
         inc_20210825::config::Config {
             rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
             fee_payer,
+            dry_run: matches.is_present("dry_run"),
+            verbose: matches.is_present("verbose"),
         }
     };
 
