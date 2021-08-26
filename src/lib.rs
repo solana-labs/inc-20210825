@@ -12,6 +12,8 @@ use {
 pub mod audit;
 pub mod cleanup;
 pub mod config;
+pub mod report;
+pub mod token;
 
 pub fn for_all_spl_token_accounts<F>(
     config: &Config,
@@ -86,7 +88,7 @@ mod tests {
             &config,
             &[Box::new(wallet)],
             &[mint],
-            |(_config, wallet, address, account)| {
+            |_config, wallet, address, account| {
                 println!(
                     "owner: {}\naddress: {}\naccount: {:?}",
                     wallet.pubkey(),

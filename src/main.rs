@@ -56,7 +56,15 @@ fn get_owners_and_mints(
     let mints = sub_matches
         .values_of("mint")
         .unwrap()
-        .map(|p| get_signer(&sub_matches, p, wallet_manager, /* allow_null_signer = */ true).pubkey())
+        .map(|p| {
+            get_signer(
+                &sub_matches,
+                p,
+                wallet_manager,
+                /* allow_null_signer = */ true,
+            )
+            .pubkey()
+        })
         .collect::<Vec<_>>();
 
     let owners = sub_matches

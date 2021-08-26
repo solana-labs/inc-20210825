@@ -28,8 +28,10 @@ fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Acco
 
             match rpc_client.send_and_confirm_transaction_with_spinner(&transaction) {
                 Ok(txid) => println!("txid: {}", txid),
-                Err(error) =>
-                    eprintln!("Error revoking delegate {} for account {}: {}", delegate, address, error),
+                Err(error) => eprintln!(
+                    "Error revoking delegate {} for account {}: {}",
+                    delegate, address, error
+                ),
             }
         }
     }
@@ -76,6 +78,6 @@ mod tests {
             delegated_amount: 999,
             close_authority: COption::None,
         };
-        cleanup((&config, &wallet, mint, account));
+        cleanup(&config, &wallet, &mint, &account);
     }
 }

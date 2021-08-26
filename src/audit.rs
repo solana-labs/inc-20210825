@@ -1,6 +1,9 @@
 use {
-    crate::config::Config,
-    serde::{Deserialize, Serialize},
+    crate::{
+        config::Config,
+        report::Report,
+        token::{DelegateBurn, DelegateChange, DelegateTransfer, OwnerChange, TokenAccountEntry},
+    },
     solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config,
     solana_sdk::{clock::Slot, pubkey::Pubkey, signature::Signature, signer::Signer},
     solana_transaction_status::{
@@ -9,76 +12,6 @@ use {
     },
     std::{collections::HashMap, str::FromStr},
 };
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct DelegateTransfer {
-    pub slot: Slot,
-    pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub amount: String,
-    pub original_ix: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct DelegateBurn {
-    pub slot: Slot,
-    pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub amount: String,
-    pub original_ix: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct OwnerChange {
-    pub slot: Slot,
-    pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub new_owner: Pubkey,
-    pub original_ix: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct DelegateChange {
-    pub slot: Slot,
-    pub transaction_id: Signature,
-    pub signer: Pubkey,
-    pub new_delegate: Pubkey,
-    pub original_ix: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct TokenAccountEntry {
-    current_owner: Pubkey,
-    mint: Pubkey,
-    // intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the
-    // latest delegate_address, so we need to collect them all and detect possible attempts later
-    all_delegate_addresses: std::collections::BTreeSet<Pubkey>,
-    total_tx_count: usize,
-    scanned_tx_count: usize,
-    scanned_spl_token_ix_count: usize,
-    failed_tx_count: usize,
-    possible_delegate_transfers: Vec<DelegateTransfer>,
-    possible_delegate_burns: Vec<DelegateBurn>,
-    owner_changes: Vec<OwnerChange>,
-    delegate_changes: Vec<DelegateChange>,
-}
-
-impl TokenAccountEntry {
-    pub fn new(current_owner: Pubkey, mint: Pubkey) -> Self {
-        Self {
-            current_owner,
-            mint,
-            ..Self::default()
-        }
-    }
-    // implement logic here to match any recognized delegate_address against delegate_transfers and
-    // delegate_burns
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct Report {
-    entries_by_token_address: HashMap<Pubkey, TokenAccountEntry>,
-}
 
 fn get_as_pubkey(json_value: &serde_json::Value, field_name: &str) -> Pubkey {
     Pubkey::from_str(json_value.get(field_name).unwrap().as_str().unwrap()).unwrap()
