@@ -48,6 +48,30 @@ fn get_signer(
         })
 }
 
+fn get_owners_and_mints(
+    sub_matches: &ArgMatches<'_>,
+    allow_null_signer: bool,
+    wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
+) -> (Vec<Box<dyn Signer>>, Vec<Pubkey>) {
+    let mints = sub_matches
+        .values_of("mint")
+        .unwrap()
+        .map(|k| {
+            k.parse::<Pubkey>().unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
+                exit(1);
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let owners = sub_matches
+        .values_of("owner")
+        .unwrap()
+        .map(|p| get_signer(&sub_matches, p, wallet_manager, allow_null_signer))
+        .collect::<Vec<_>>();
+    (owners, mints)
+}
+
 fn main() {
     let matches = clap::App::new("inc-20210805")
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
@@ -127,43 +151,11 @@ fn main() {
 
     match matches.subcommand() {
         ("audit", Some(sub_matches)) => {
-            let mints = sub_matches
-                .values_of("mint")
-                .unwrap()
-                .map(|k| {
-                    k.parse::<Pubkey>().unwrap_or_else(|e| {
-                        eprintln!("error: {}", e);
-                        exit(1);
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            let owners = sub_matches
-                .values_of("owner")
-                .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager, true))
-                .collect::<Vec<_>>();
-
+            let (owners, mints) = get_owners_and_mints(sub_matches, true, &mut wallet_manager);
             audit::run(config, owners, mints);
         }
         ("cleanup", Some(sub_matches)) => {
-            let mints = sub_matches
-                .values_of("mint")
-                .unwrap()
-                .map(|k| {
-                    k.parse::<Pubkey>().unwrap_or_else(|e| {
-                        eprintln!("error: {}", e);
-                        exit(1);
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            let owners = sub_matches
-                .values_of("owner")
-                .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager, false))
-                .collect::<Vec<_>>();
-
+            let (owners, mints) = get_owners_and_mints(sub_matches, false, &mut wallet_manager);
             cleanup::run(config, owners, mints);
         }
         _ => unreachable!(),
