@@ -145,7 +145,7 @@ fn main() {
             let owners = sub_matches
                 .values_of("owner")
                 .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager, true).1)
+                .map(|p| get_signer(&matches, p, &mut wallet_manager, true))
                 .collect::<Vec<_>>();
 
             audit::run(config, owners, mints);
