@@ -64,7 +64,7 @@ struct Report {
     wallets: HashMap<Pubkey, TokenAccountEntry>, // key = token address
 }
 
-fn scan_ix(token_account: &mut TokenAccountEntry, sig: Signature, ix: &serde_json::Value) -> bool {
+fn try_to_recognize_and_consume_ix(token_account: &mut TokenAccountEntry, sig: Signature, ix: &serde_json::Value) -> bool {
     const CONSUMED: bool = false;
     const IGNORED: bool = false;
 
@@ -218,7 +218,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                             }
                         })
                         // program_id must be the tokenkeg according the previous .filter_map()
-                        .filter(|(_program_id, ix)| scan_ix(&mut token_account_entry, sig, ix))
+                        .filter(|(_program_id, ix)| try_to_recognize_and_consume_ix(&mut token_account_entry, sig, ix))
                         .for_each(|(program_id, ix)| {
                             dbg!(("unknown instruction!", program_id, ix));
                         });
