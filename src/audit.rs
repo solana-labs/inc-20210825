@@ -20,7 +20,7 @@ struct DelegateTransfer {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct DelegateBurn {
     pub transaction_id: Signature,
-    pub signer: Pubkey,
+    pub signer: String, // was Pubkey
     pub amount: String,
 }
 
@@ -42,13 +42,15 @@ struct DelegateChange {
 struct TokenAccountEntry {
     owner: Pubkey,
     mint: Pubkey,
-    // TODO: intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the latest delegate_address
-    //delegate_address: Option<Pubkey>
+    // intra slot tx order can't be guranteed.... so there is no perfect way to precisely track the
+    // latest delegate_address, so we need to collect them all and detect possible attempts later
+    all_delegate_addresses: std::collections::BTreeSet<String>,
     total_tx_count: usize,
     scanned_tx_count: usize,
     scanned_spl_token_ix_count: usize,
     failed_tx_count: usize,
     delegate_transfers: Vec<DelegateTransfer>,
+    delegate_burns: Vec<DelegateBurn>,
     owner_changes: Vec<OwnerChange>,
     delegate_changes: Vec<DelegateChange>,
 }
@@ -61,6 +63,8 @@ impl TokenAccountEntry {
             ..Self::default()
         }
     }
+    // implement logic here to match any recognized delegate_address against delegate_transfers and
+    // delegate_burns
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -69,7 +73,7 @@ struct Report {
 }
 
 fn try_to_recognize_and_consume_ix(
-    token_account: &mut TokenAccountEntry,
+    token_account_entry: &mut TokenAccountEntry,
     sig: Signature,
     ix: &serde_json::Value,
 ) -> bool {
@@ -81,7 +85,25 @@ fn try_to_recognize_and_consume_ix(
             let ix_info = ix.get("info");
             match a.as_ref() {
                 "transfer" | "transferChecked" => {
-                    token_account.delegate_transfers.push(DelegateTransfer {
+                    token_account_entry
+                        .delegate_transfers
+                        .push(DelegateTransfer {
+                            transaction_id: sig,
+                            signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
+                            // TODO: todo: properly handle this field!
+                            amount: format!(
+                                "{}",
+                                ix_info
+                                    .unwrap()
+                                    .get("tokenAmount")
+                                    .map(|ta| ta.get("uiAmountString").unwrap())
+                                    .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
+                            ),
+                        });
+                    CONSUMED
+                }
+                "burn" | "burnChecked" => {
+                    token_account_entry.delegate_burns.push(DelegateBurn {
                         transaction_id: sig,
                         signer: format!("{}", ix_info.unwrap().get("authority").unwrap()),
                         // TODO: todo: properly handle this field!
@@ -97,9 +119,13 @@ fn try_to_recognize_and_consume_ix(
                     CONSUMED
                 }
                 "approve" | "approveChecked" => {
-                    token_account.delegate_changes.push(DelegateChange {
+                    let signer = format!("{}", ix_info.unwrap().get("owner").unwrap());
+                    token_account_entry
+                        .all_delegate_addresses
+                        .insert(signer.clone());
+                    token_account_entry.delegate_changes.push(DelegateChange {
                         transaction_id: sig,
-                        signer: format!("{}", ix_info.unwrap().get("owner").unwrap()),
+                        signer: signer,
                         new_delegate: format!("{}", ix_info.unwrap().get("delegate").unwrap()),
                     });
                     CONSUMED
@@ -108,7 +134,7 @@ fn try_to_recognize_and_consume_ix(
                     match (ix_info.map(|info| info.get("authorityType").unwrap())).as_ref() {
                         Some(serde_json::value::Value::String(a)) => match a.as_ref() {
                             "accountOwner" => {
-                                token_account.owner_changes.push(OwnerChange {
+                                token_account_entry.owner_changes.push(OwnerChange {
                                     transaction_id: sig,
                                     new_owner: format!(
                                         "{}",
@@ -240,6 +266,7 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
                         })
                         .for_each(|(program_id, ix)| {
                             dbg!(("unknown instruction!", program_id, ix));
+                            panic!();
                         });
                 }
 
