@@ -39,13 +39,9 @@ fn get_signer(
     keypair_path: &str,
     wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
     allow_null_signer: bool,
-) -> (Box<dyn Signer>, Pubkey) {
+) -> Box<dyn Signer> {
     let config = SignerFromPathConfig { allow_null_signer };
     signer_from_path_with_config(matches, keypair_path, "owner", wallet_manager, &config)
-        .map(|s| {
-            let p = s.pubkey();
-            (s, p)
-        })
         .unwrap_or_else(|e| {
             eprintln!("error: {}", e);
             exit(1);
