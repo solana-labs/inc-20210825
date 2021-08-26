@@ -38,10 +38,9 @@ fn get_signer(
     matches: &ArgMatches<'_>,
     keypair_path: &str,
     wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
+    allow_null_signer: bool,
 ) -> (Box<dyn Signer>, Pubkey) {
-    let config = SignerFromPathConfig {
-        allow_null_signer: true,
-    };
+    let config = SignerFromPathConfig { allow_null_signer };
     signer_from_path_with_config(matches, keypair_path, "owner", wallet_manager, &config)
         .map(|s| {
             let p = s.pubkey();
@@ -146,7 +145,7 @@ fn main() {
             let owners = sub_matches
                 .values_of("owner")
                 .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager).1)
+                .map(|p| get_signer(&matches, p, &mut wallet_manager, true).1)
                 .collect::<Vec<_>>();
 
             audit::run(config, owners, mints);
@@ -166,7 +165,7 @@ fn main() {
             let owners = sub_matches
                 .values_of("owner")
                 .unwrap()
-                .map(|p| get_signer(&matches, p, &mut wallet_manager))
+                .map(|p| get_signer(&matches, p, &mut wallet_manager, false))
                 .collect::<Vec<_>>();
 
             cleanup::run(config, owners, mints);
