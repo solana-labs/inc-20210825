@@ -1263,6 +1263,7 @@ version = "0.1.0"
 dependencies = [
  "bs58 0.4.0",
  "clap",
+ "serde",
  "serde_json",
  "solana-account-decoder",
  "solana-clap-utils",
@@ -1270,6 +1271,7 @@ dependencies = [
  "solana-client",
  "solana-remote-wallet",
  "solana-sdk",
+ "solana-transaction-status",
  "spl-token",
 ]
 
