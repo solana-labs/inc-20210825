@@ -17,10 +17,10 @@ pub fn for_all_spl_token_accounts<F>(
     config: &Config,
     wallets: &[Box<dyn Signer>],
     mints: &[Pubkey],
-    f: F,
+    mut f: F,
 ) -> ClientResult<()>
 where
-    F: FnMut((&Config, &dyn Signer, Pubkey, spl_token::state::Account)) + Copy,
+    F: FnMut(&Config, &dyn Signer, &Pubkey, &spl_token::state::Account),
 {
     for wallet in wallets {
         let filters = Some(vec![
@@ -54,7 +54,7 @@ where
             })
             .filter(|(_address, account)| mints.contains(&account.mint))
             .map(|(address, account)| (config, wallet.as_ref(), address, account))
-            .for_each(f);
+            .for_each(|(config, wallet, address, account)| f(config, wallet, &address, &account));
     }
     Ok(())
 }

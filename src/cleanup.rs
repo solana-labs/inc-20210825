@@ -7,8 +7,7 @@ use {
     spl_token::{self, instruction::revoke, state::Account},
 };
 
-fn cleanup(args: (&Config, &dyn Signer, Pubkey, Account)) {
-    let (config, owner, address, account) = args;
+fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Account) {
     if let COption::Some(delegate) = account.delegate {
         println!("revoking delegate {} for account {}", delegate, address);
         let rpc_client = &config.rpc_client;
