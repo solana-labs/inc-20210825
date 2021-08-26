@@ -105,7 +105,7 @@ fn try_to_recognize_and_consume_ix(
 
                     if source_address != reported_token_address {
                         assert_eq!(destination_address, reported_token_address);
-                        // transfer incming into reported_token_address isn't harmful
+                        // transfer incoming into reported_token_address isn't harmful
                         return IGNORED;
                     }
 
