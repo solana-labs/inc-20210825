@@ -182,7 +182,7 @@ impl Report {
         writeln!(&mut writer, "Possibly Fraudulent Burns")?;
         writeln!(
             &mut writer,
-            "Account Address,Owner,Signature,Slot,Signer,Amount"
+            "Account Address,Owner,Signature,Slot,Signer,Amount,JSON Instruction"
         )?;
         for (account_address, account_entry) in &self.entries_by_token_address {
             for burn in &account_entry.possible_delegate_burns {

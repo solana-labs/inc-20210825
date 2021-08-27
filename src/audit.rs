@@ -62,6 +62,9 @@ fn try_to_recognize_and_consume_ix(
                     //    return IGNORED;
                     //}
 
+                    let original_ix = format!("{}", ix)
+                        .replace("\"", "\"\"");
+                    let original_ix = format!("\"{}\"", original_ix);
                     token_account_entry
                         .possible_delegate_transfers
                         .push(DelegateTransfer {
@@ -77,7 +80,7 @@ fn try_to_recognize_and_consume_ix(
                                     .map(|ta| ta.get("uiAmountString").unwrap())
                                     .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
                             ),
-                            original_ix: format!("{}", ix),
+                            original_ix,
                         });
                     CONSUMED
                 }
@@ -88,6 +91,9 @@ fn try_to_recognize_and_consume_ix(
                         return IGNORED;
                     }
 
+                    let original_ix = format!("{}", ix)
+                        .replace("\"", "\"\"");
+                    let original_ix = format!("\"{}\"", original_ix);
                     token_account_entry
                         .possible_delegate_burns
                         .push(DelegateBurn {
@@ -103,7 +109,7 @@ fn try_to_recognize_and_consume_ix(
                                     .map(|ta| ta.get("uiAmountString").unwrap())
                                     .unwrap_or_else(|| ix_info.unwrap().get("amount").unwrap())
                             ),
-                            original_ix: format!("{}", ix),
+                            original_ix,
                         });
                     CONSUMED
                 }
@@ -120,6 +126,9 @@ fn try_to_recognize_and_consume_ix(
                         return IGNORED;
                     }
 
+                    let original_ix = format!("{}", ix)
+                        .replace("\"", "\"\"");
+                    let original_ix = format!("\"{}\"", original_ix);
                     let new_delegate = get_as_pubkey(ix_info.unwrap(), "delegate");
                     token_account_entry
                         .all_delegate_addresses
@@ -129,7 +138,7 @@ fn try_to_recognize_and_consume_ix(
                         transaction_id: sig,
                         signer,
                         new_delegate,
-                        original_ix: format!("{}", ix),
+                        original_ix,
                     });
                     CONSUMED
                 }
@@ -150,12 +159,15 @@ fn try_to_recognize_and_consume_ix(
                                         return IGNORED;
                                     }
 
+                                    let original_ix = format!("{}", ix)
+                                        .replace("\"", "\"\"");
+                                    let original_ix = format!("\"{}\"", original_ix);
                                     token_account_entry.owner_changes.push(OwnerChange {
                                         slot,
                                         transaction_id: sig,
                                         new_owner: get_as_pubkey(ix_info.unwrap(), "newAuthority"),
                                         signer,
-                                        original_ix: format!("{}", ix),
+                                        original_ix,
                                     });
                                     CONSUMED
                                 }
