@@ -100,7 +100,7 @@ mod tests {
         for_all_spl_token_accounts(
             &config,
             &[Box::new(wallet)],
-            &[mint],
+            Some(&[mint]),
             |_config, wallet, address, account| {
                 println!(
                     "owner: {}\naddress: {}\naccount: {:?}",
