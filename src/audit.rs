@@ -62,8 +62,7 @@ fn try_to_recognize_and_consume_ix(
                     //    return IGNORED;
                     //}
 
-                    let original_ix = format!("{}", ix)
-                        .replace("\"", "\"\"");
+                    let original_ix = format!("{}", ix).replace("\"", "\"\"");
                     let original_ix = format!("\"{}\"", original_ix);
                     token_account_entry
                         .possible_delegate_transfers
@@ -91,8 +90,7 @@ fn try_to_recognize_and_consume_ix(
                         return IGNORED;
                     }
 
-                    let original_ix = format!("{}", ix)
-                        .replace("\"", "\"\"");
+                    let original_ix = format!("{}", ix).replace("\"", "\"\"");
                     let original_ix = format!("\"{}\"", original_ix);
                     token_account_entry
                         .possible_delegate_burns
@@ -126,8 +124,7 @@ fn try_to_recognize_and_consume_ix(
                         return IGNORED;
                     }
 
-                    let original_ix = format!("{}", ix)
-                        .replace("\"", "\"\"");
+                    let original_ix = format!("{}", ix).replace("\"", "\"\"");
                     let original_ix = format!("\"{}\"", original_ix);
                     let new_delegate = get_as_pubkey(ix_info.unwrap(), "delegate");
                     token_account_entry
@@ -159,8 +156,7 @@ fn try_to_recognize_and_consume_ix(
                                         return IGNORED;
                                     }
 
-                                    let original_ix = format!("{}", ix)
-                                        .replace("\"", "\"\"");
+                                    let original_ix = format!("{}", ix).replace("\"", "\"\"");
                                     let original_ix = format!("\"{}\"", original_ix);
                                     token_account_entry.owner_changes.push(OwnerChange {
                                         slot,
