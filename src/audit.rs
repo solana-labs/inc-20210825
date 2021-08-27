@@ -159,6 +159,7 @@ fn try_to_recognize_and_consume_ix(
                                     });
                                     CONSUMED
                                 }
+                                "closeAccount" => CONSUMED,
                                 _ => !CONSUMED,
                             }
                         }

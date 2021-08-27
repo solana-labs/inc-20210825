@@ -24,12 +24,21 @@ pub fn for_all_spl_token_accounts<F>(
 where
     F: FnMut(&Config, &dyn Signer, &Pubkey, &spl_token::state::Account),
 {
+    let mut already_processed = std::collections::HashSet::new();
+
     for wallet in wallets {
+        let wallet_pubkey = wallet.pubkey();
+        if already_processed.contains(&wallet_pubkey) {
+            continue;
+        } else {
+            already_processed.insert(wallet_pubkey);
+        }
+
         let filters = Some(vec![
             RpcFilterType::DataSize(spl_token::state::Account::LEN as u64),
             RpcFilterType::Memcmp(Memcmp {
                 offset: 32,
-                bytes: MemcmpEncodedBytes::Binary(bs58::encode(wallet.pubkey()).into_string()),
+                bytes: MemcmpEncodedBytes::Binary(bs58::encode(wallet_pubkey).into_string()),
                 encoding: None,
             }),
         ]);

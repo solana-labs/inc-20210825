@@ -8,6 +8,7 @@ SPL_KEYGEN=${SPL_KEYGEN:-../solana/target/release/solana-keygen}
 MINT=$1
 TARGET_OWNER=$2
 COMMON=${COMMON:-"--verbose -ul"}
+#COMMON=${COMMON:-"--verbose -ul --use-unchecked-instruction"}
 
 BAD_ACCOUNT=$($SPL_KEYGEN grind --starts-with bad:1 --ignore-case | tail -n1 | awk '{print $4}')
 
