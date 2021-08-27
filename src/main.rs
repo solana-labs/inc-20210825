@@ -28,9 +28,6 @@ pub fn mint_address_arg<'a, 'b>() -> Arg<'a, 'b> {
         .takes_value(true)
         .value_name("MINT_ADDRESS")
         .validator(is_valid_pubkey)
-        .required(true)
-        .multiple(true)
-        .number_of_values(1)
         .help("Address of the SPL token mint")
 }
 
@@ -52,20 +49,26 @@ fn get_owners_and_mints(
     sub_matches: &ArgMatches<'_>,
     allow_null_signer: bool,
     wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
-) -> (Vec<Box<dyn Signer>>, Vec<Pubkey>) {
-    let mints = sub_matches
-        .values_of("mint")
-        .unwrap()
-        .map(|p| {
-            get_signer(
-                sub_matches,
-                p,
-                wallet_manager,
-                /* allow_null_signer = */ true,
-            )
-            .pubkey()
-        })
-        .collect::<Vec<_>>();
+) -> (Vec<Box<dyn Signer>>, Option<Vec<Pubkey>>) {
+    let mints = if sub_matches.is_present("mint") {
+        Some(
+            sub_matches
+                .values_of("mint")
+                .unwrap()
+                .map(|p| {
+                    get_signer(
+                        sub_matches,
+                        p,
+                        wallet_manager,
+                        /* allow_null_signer = */ true,
+                    )
+                    .pubkey()
+                })
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        None
+    };
 
     let owners = sub_matches
         .values_of("owner")

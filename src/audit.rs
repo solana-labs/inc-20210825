@@ -184,14 +184,14 @@ fn try_to_recognize_and_consume_ix(
     }
 }
 
-pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
+pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Option<Vec<Pubkey>>) {
     println!("audit");
     let mut report = Report::new();
     const SIGNATURES_LIMIT: usize = 1000;
     crate::for_all_spl_token_accounts(
         &config,
         owners.as_slice(),
-        mints.as_slice(),
+        mints.as_deref(),
         |config, owner, reported_token_address, account| {
             let rpc_client = &config.rpc_client;
             let owner_pubkey = owner.pubkey();

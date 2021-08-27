@@ -18,7 +18,7 @@ pub mod token;
 pub fn for_all_spl_token_accounts<F>(
     config: &Config,
     wallets: &[Box<dyn Signer>],
-    mints: &[Pubkey],
+    mints: Option<&[Pubkey]>,
     mut f: F,
 ) -> ClientResult<()>
 where
@@ -63,7 +63,11 @@ where
                 }
                 Some(addr).zip(token_account)
             })
-            .filter(|(_address, account)| mints.contains(&account.mint))
+            .filter(|(_address, account)| {
+                mints
+                    .map(|mints| mints.contains(&account.mint))
+                    .unwrap_or(true)
+            })
             .map(|(address, account)| (config, wallet.as_ref(), address, account))
             .for_each(|(config, wallet, address, account)| f(config, wallet, &address, &account));
     }

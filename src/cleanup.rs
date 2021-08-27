@@ -37,9 +37,9 @@ fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Acco
     }
 }
 
-pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Vec<Pubkey>) {
+pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Option<Vec<Pubkey>>) {
     println!("cleanup");
-    crate::for_all_spl_token_accounts(&config, owners.as_slice(), mints.as_slice(), cleanup)
+    crate::for_all_spl_token_accounts(&config, owners.as_slice(), mints.as_deref(), cleanup)
         .unwrap();
 }
 
