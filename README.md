@@ -64,7 +64,7 @@ DEPOSIT_SOL_WALLET2_PATH \
 ... \
 DEPOSIT_SOL_WALLETN_PATH | tee report.csv
 ```
-### Expected output
+#### Expected output
 
 ```
 audit
