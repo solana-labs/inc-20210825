@@ -8,6 +8,18 @@ sudo apt install libssl-dev libudev-dev
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
+### Minimum Solana Configuration
+
+#### Initialize default keypair file
+
+This is only needed as part of program's initialization.
+SOL isn't used for `audit` mode. Only needed for `cleanup` mode to send actual
+cleanup transactions if any.
+
+```
+solana-keygen new
+```
+
 ### Targeted vulnerable account cleanup
 The following command will revoke any existing delegations on all wallet:mint
 pairs provided. Specify addresses for all mints that your organization supports
@@ -52,6 +64,20 @@ DEPOSIT_SOL_WALLET2_PATH \
 ... \
 DEPOSIT_SOL_WALLETN_PATH | tee report.csv
 ```
+### Expected output
+
+```
+audit
+Summary Reassigned Token Account Report
+Status,Account Address,Owner Address,Set Owner Signature,Delegation Signature,Possibly Fraudulent Transfer and Burn Signatures
+<Records for each address with Safe or other status>
+...
+```
+
+If you only see the headers with no records, the pointed RPC URL might not have
+full transaction history. Try to use other RPC by the `-u` option or edit the
+solana cli config file on your environment.
+
 ### Full vulnerable account cleanup
 It is possible that an attacker created vulnerable accounts for mints that your
 organization does not yet support in the hope that one day they will be supported
