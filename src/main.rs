@@ -27,6 +27,8 @@ pub fn mint_address_arg<'a, 'b>() -> Arg<'a, 'b> {
         .long("mint")
         .takes_value(true)
         .value_name("MINT_ADDRESS")
+        .multiple(true)
+        .number_of_values(1)
         .validator(is_valid_pubkey)
         .help("Address of the SPL token mint")
 }
