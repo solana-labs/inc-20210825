@@ -83,11 +83,13 @@ mod tests {
 
     #[test]
     fn test_for_all_spl_token_accounts() {
-        let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+        let json_rpc_url = "https://api.mainnet-beta.solana.com".to_string();
+        let rpc_client = RpcClient::new(json_rpc_url.clone());
         let fee_payer = Box::new(NullSigner::new(
             &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
         ));
         let config = Config {
+            json_rpc_url,
             rpc_client,
             fee_payer,
             dry_run: true,

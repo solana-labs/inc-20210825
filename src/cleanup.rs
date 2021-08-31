@@ -53,7 +53,8 @@ mod tests {
 
     #[test]
     fn test_cleanup_delegation() {
-        let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com/".to_string());
+        let json_rpc_url = "https://api.mainnet-beta.solana.com".to_string();
+        let rpc_client = RpcClient::new(json_rpc_url.clone());
         let wallet = NullSigner::new(
             &Pubkey::from_str("EriSViggFFQ72fYgCKYyattiY3rDsx9bnMgMUpGa5x2H").unwrap(),
         );
@@ -63,6 +64,7 @@ mod tests {
         let mint = Pubkey::from_str("4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R").unwrap();
         let delegate = Pubkey::from_str("BaDmyYaaua9k8mZuL53UUt8E6peRMeT3cRVjYcLm68T7").unwrap();
         let config = Config {
+            json_rpc_url,
             rpc_client,
             fee_payer,
             dry_run: true,
