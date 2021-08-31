@@ -313,8 +313,6 @@ pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Option<Vec<Pubke
     .unwrap();
 
     report.summary(std::io::stdout()).unwrap();
-    if config.verbose {
-        println!();
-        report.detail(std::io::stdout()).unwrap();
-    }
+    println!();
+    report.detail(std::io::stdout()).unwrap();
 }
