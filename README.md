@@ -2,7 +2,7 @@
 ### Install prerequisites
 #### System development libraries
 ```
-sudo apt install libssl-dev libudev-dev
+sudo apt install libssl-dev libudev-dev pkg-config gcc
 ```
 #### Rust
 ```
