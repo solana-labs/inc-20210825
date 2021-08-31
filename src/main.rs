@@ -9,7 +9,10 @@ use {
     },
     solana_client::rpc_client::RpcClient,
     solana_remote_wallet::remote_wallet::RemoteWalletManager,
-    solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Signer},
+    solana_sdk::{
+        commitment_config::CommitmentConfig, program_pack::Pack, pubkey::Pubkey, signature::Signer,
+        system_program,
+    },
     std::{process::exit, sync::Arc},
 };
 
@@ -50,24 +53,42 @@ fn get_signer(
 fn get_owners_and_mints(
     sub_matches: &ArgMatches<'_>,
     allow_null_signer: bool,
+    rpc_client: &RpcClient,
     wallet_manager: &mut Option<Arc<RemoteWalletManager>>,
 ) -> (Vec<Box<dyn Signer>>, Option<Vec<Pubkey>>) {
     let mints = if sub_matches.is_present("mint") {
-        Some(
-            sub_matches
-                .values_of("mint")
-                .unwrap()
-                .map(|p| {
-                    get_signer(
-                        sub_matches,
-                        p,
-                        wallet_manager,
-                        /* allow_null_signer = */ true,
-                    )
-                    .pubkey()
-                })
-                .collect::<Vec<_>>(),
-        )
+        let mints = sub_matches
+            .values_of("mint")
+            .unwrap()
+            .map(|p| {
+                get_signer(
+                    sub_matches,
+                    p,
+                    wallet_manager,
+                    /* allow_null_signer = */ true,
+                )
+                .pubkey()
+            })
+            .collect::<Vec<_>>();
+        for mint in &mints {
+            let mint_account = rpc_client.get_account(mint).unwrap_or_else(|_| {
+                panic!(
+                    "Account {} expected to be an SPL token mint, but does not exist. Maybe this is a system account?",
+                    mint
+                )
+            });
+            if mint_account.owner != spl_token::id() {
+                eprintln!("Account {} is not owned by the SPL token program, actually owned by {}, likely this parameter is incorrect", mint, mint_account.owner);
+                exit(1);
+            }
+            let _ = spl_token::state::Mint::unpack(&mint_account.data).unwrap_or_else(|_| {
+                panic!(
+                    "Account {} is not an SPL token mint, likely this parameter is incorrect",
+                    mint
+                )
+            });
+        }
+        Some(mints)
     } else {
         None
     };
@@ -77,6 +98,23 @@ fn get_owners_and_mints(
         .unwrap()
         .map(|p| get_signer(sub_matches, p, wallet_manager, allow_null_signer))
         .collect::<Vec<_>>();
+
+    for owner in &owners {
+        let owner_address = owner.pubkey();
+        // Don't unwrap to allow possibly non-existent owner
+        // A non-existent owner just means a system account with no lamports,
+        // which is a valid sitation for an owner account.
+        if let Ok(owner_account) = rpc_client.get_account(&owner_address) {
+            if owner_account.owner == spl_token::id() {
+                eprintln!("Account {} is not owned by the system program, actually owned by the SPL token program. Maybe this is a mint?", &owner_address);
+                exit(1);
+            } else if owner_account.owner != system_program::id() {
+                eprintln!("Account {} is not owned by the system program, actually owned by {}, this parameter is likely incorrect", &owner_address, owner_account.owner);
+                exit(1);
+            }
+        }
+    }
+
     (owners, mints)
 }
 
@@ -177,13 +215,18 @@ fn main() {
 
     match matches.subcommand() {
         ("audit", Some(sub_matches)) => {
-            let (owners, mints) = get_owners_and_mints(sub_matches, true, &mut wallet_manager);
+            let (owners, mints) =
+                get_owners_and_mints(sub_matches, true, &config.rpc_client, &mut wallet_manager);
             audit::run(config, owners, mints);
         }
         ("cleanup", Some(sub_matches)) => {
-            let allow_null_signer = if dry_run { true } else { false };
-            let (owners, mints) =
-                get_owners_and_mints(sub_matches, allow_null_signer, &mut wallet_manager);
+            let allow_null_signer = dry_run;
+            let (owners, mints) = get_owners_and_mints(
+                sub_matches,
+                allow_null_signer,
+                &config.rpc_client,
+                &mut wallet_manager,
+            );
             cleanup::run(config, owners, mints);
         }
         _ => unreachable!(),
