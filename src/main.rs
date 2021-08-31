@@ -141,6 +141,7 @@ fn main() {
         .get_matches();
 
     let mut wallet_manager = None;
+    let dry_run = matches.is_present("dry_run");
     let config = {
         let cli_config = if let Some(config_file) = matches.value_of("config_file") {
             solana_cli_config::Config::load(config_file).unwrap_or_default()
@@ -169,7 +170,7 @@ fn main() {
         inc_20210825::config::Config {
             rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
             fee_payer,
-            dry_run: matches.is_present("dry_run"),
+            dry_run,
             verbose: matches.is_present("verbose"),
         }
     };
@@ -180,7 +181,9 @@ fn main() {
             audit::run(config, owners, mints);
         }
         ("cleanup", Some(sub_matches)) => {
-            let (owners, mints) = get_owners_and_mints(sub_matches, false, &mut wallet_manager);
+            let allow_null_signer = if dry_run { true } else { false };
+            let (owners, mints) =
+                get_owners_and_mints(sub_matches, allow_null_signer, &mut wallet_manager);
             cleanup::run(config, owners, mints);
         }
         _ => unreachable!(),
