@@ -101,6 +101,9 @@ fn get_owners_and_mints(
 
     for owner in &owners {
         let owner_address = owner.pubkey();
+        // Don't unwrap to allow possibly non-existent owner
+        // A non-existent owner just means a system account with no lamports,
+        // which is a valid sitation for an owner account.
         if let Ok(owner_account) = rpc_client.get_account(&owner_address) {
             if owner_account.owner == spl_token::id() {
                 eprintln!("Account {} is not owned by the system program, actually owned by the SPL token program. Maybe this is a mint?", &owner_address);
