@@ -71,12 +71,12 @@ fn get_owners_and_mints(
             })
             .collect::<Vec<_>>();
         for mint in &mints {
-            let mint_account = rpc_client.get_account(mint).unwrap_or_else(|_|
+            let mint_account = rpc_client.get_account(mint).unwrap_or_else(|_| {
                 panic!(
                     "Account {} expected to be an SPL token mint, but does not exist. Maybe this is a system account?",
                     mint
-                    )
-                );
+                )
+            });
             if mint_account.owner != spl_token::id() {
                 eprintln!("Account {} is not owned by the SPL token program, actually owned by {}, likely this parameter is incorrect", mint, mint_account.owner);
                 exit(1);
