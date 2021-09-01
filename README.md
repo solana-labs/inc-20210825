@@ -26,8 +26,8 @@ solana-keygen new
 This usually means the need to store them in the Solana CLI's JSON format.
 
 However, only public key _addresses_ will be needed with its `--dry-run` option.
-In that case, equivalent `spl-token revoke ...` must be executed with private
-keys.
+In that case, equivalent `spl-token revoke ...` must be executed with corresponding
+private keys to clean-up them.
 
 `audit` mode doesn't require private keys, only public key _addresses_ of
 spl-token owners.
