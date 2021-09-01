@@ -72,20 +72,22 @@ fn get_owners_and_mints(
             .collect::<Vec<_>>();
         for mint in &mints {
             let mint_account = rpc_client.get_account(mint).unwrap_or_else(|_| {
-                panic!(
+                eprintln!(
                     "Account {} expected to be an SPL token mint, but does not exist. Maybe this is a system account?",
                     mint
-                )
+                );
+                exit(1);
             });
             if mint_account.owner != spl_token::id() {
                 eprintln!("Account {} is not owned by the SPL token program, actually owned by {}, likely this parameter is incorrect", mint, mint_account.owner);
                 exit(1);
             }
             let _ = spl_token::state::Mint::unpack(&mint_account.data).unwrap_or_else(|_| {
-                panic!(
+                eprintln!(
                     "Account {} is not an SPL token mint, likely this parameter is incorrect",
                     mint
-                )
+                );
+                exit(1);
             });
         }
         Some(mints)
@@ -116,6 +118,21 @@ fn get_owners_and_mints(
     }
 
     (owners, mints)
+}
+
+fn check_rpc_has_genesis_block(rpc_client: &RpcClient, rpc_url: &str) {
+    let rpc_first_slot = rpc_client.get_first_available_block().unwrap_or_else(|_| {
+        eprintln!("Could not fetch available block from {}, perhaps the URL is wrong or the backend is down", rpc_url);
+        exit(1);
+    });
+    const FIRST_SLOT: u64 = 1; // solana-test-validator starts at slot 1, so this makes testing easier
+    if rpc_first_slot > FIRST_SLOT {
+        eprintln!(
+            "Earliest block from {} is {}, some transactions will be omitted during audit",
+            rpc_url, rpc_first_slot
+        );
+        exit(1);
+    }
 }
 
 fn main() {
@@ -149,6 +166,13 @@ fn main() {
                 .takes_value(false)
                 .global(true)
                 .help("Do all processing without sending transactions"),
+        )
+        .arg(
+            Arg::with_name("skip_genesis_block_check")
+                .long("skip-genesis-block-check")
+                .takes_value(false)
+                .global(true)
+                .help("Skip checking that the RPC endpoint has the genesis block"),
         )
         .arg(
             Arg::with_name("json_rpc_url")
@@ -205,8 +229,12 @@ fn main() {
             exit(1);
         });
 
+        let rpc_client =
+            RpcClient::new_with_commitment(json_rpc_url.clone(), CommitmentConfig::confirmed());
+
         inc_20210825::config::Config {
-            rpc_client: RpcClient::new_with_commitment(json_rpc_url, CommitmentConfig::confirmed()),
+            json_rpc_url,
+            rpc_client,
             fee_payer,
             dry_run,
             verbose: matches.is_present("verbose"),
@@ -217,6 +245,10 @@ fn main() {
         ("audit", Some(sub_matches)) => {
             let (owners, mints) =
                 get_owners_and_mints(sub_matches, true, &config.rpc_client, &mut wallet_manager);
+            if !matches.is_present("skip_genesis_block_check") {
+                check_rpc_has_genesis_block(&config.rpc_client, &config.json_rpc_url);
+            }
+
             audit::run(config, owners, mints);
         }
         ("cleanup", Some(sub_matches)) => {
