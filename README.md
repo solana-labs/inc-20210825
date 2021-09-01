@@ -20,6 +20,17 @@ cleanup transactions if any.
 solana-keygen new
 ```
 
+### Availability of private keys
+
+`cleanup` mode requires the existence of private keys locally. This usually
+means the need to store them in the Solana CLI's JSON format.
+
+However, only public key _addresses_ will be needed with its `--dry-run` option.
+In that case, equivalent `spl-token revoke ...` must be executed with private
+keys.
+
+`audit` mode doesn't require private keys, only public key _addresses_.
+
 ### Targeted vulnerable account cleanup
 The following command will revoke any existing delegations on all wallet:mint
 pairs provided. Specify addresses for all mints that your organization supports
