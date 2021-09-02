@@ -20,6 +20,9 @@ cleanup transactions if any.
 solana-keygen new
 ```
 
+Otherwise, this program would fail to execute at all with
+`error: No such file or directory (os error 2)`.
+
 ### Availability of private keys
 
 `cleanup` mode requires the existence of private keys of spl-token owners locally.
