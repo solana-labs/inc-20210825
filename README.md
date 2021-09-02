@@ -93,6 +93,9 @@ If you only see the headers with no records, the pointed RPC URL might not have
 full transaction history. Try to use other RPC by the `-u` option or edit the
 solana cli config file on your environment.
 
+Also, there will be no records printed if the given owner address holds no spl-token
+at all.
+
 ### Full vulnerable account cleanup
 It is possible that an attacker created vulnerable accounts for mints that your
 organization does not yet support in the hope that one day they will be supported
