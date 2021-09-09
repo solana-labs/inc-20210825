@@ -1,6 +1,6 @@
 use {
     clap::{Arg, ArgMatches},
-    inc_20210825::{audit, cleanup},
+    inc_20210825::{audit, cleanup, simulate},
     solana_clap_utils::{
         input_validators::{
             is_url_or_moniker, is_valid_pubkey, is_valid_signer, normalize_to_url_if_moniker,
@@ -200,6 +200,12 @@ fn main() {
                 .arg(mint_address_arg())
                 .arg(owner_keypair_arg()),
         )
+        .subcommand(
+            clap::SubCommand::with_name("simulate")
+                .about("Simulate transaction")
+                .arg(mint_address_arg())
+                .arg(owner_keypair_arg()),
+        )
         .get_matches();
 
     let mut wallet_manager = None;
@@ -260,6 +266,16 @@ fn main() {
                 &mut wallet_manager,
             );
             cleanup::run(config, owners, mints);
+        }
+        ("simulate", Some(sub_matches)) => {
+            let allow_null_signer = dry_run;
+            let (owners, mints) = get_owners_and_mints(
+                sub_matches,
+                allow_null_signer,
+                &config.rpc_client,
+                &mut wallet_manager,
+            );
+            simulate::run(config, owners, mints);
         }
         _ => unreachable!(),
     }
