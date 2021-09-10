@@ -36,6 +36,18 @@ pub fn mint_address_arg<'a, 'b>() -> Arg<'a, 'b> {
         .help("Address of the SPL token mint")
 }
 
+pub fn source_address_arg<'a, 'b>() -> Arg<'a, 'b> {
+    Arg::with_name("source")
+        .long("source")
+        .takes_value(true)
+        .value_name("SOURCE_ADDRESS")
+        .number_of_values(1)
+        .required(true)
+        .validator(is_valid_pubkey)
+        .help("Address of source of the SPL token, corresponding to the given mint")
+}
+
+
 fn get_signer(
     matches: &ArgMatches<'_>,
     keypair_path: &str,
@@ -135,6 +147,8 @@ fn check_rpc_has_genesis_block(rpc_client: &RpcClient, rpc_url: &str) {
     }
 }
 
+use solana_clap_utils::fee_payer::fee_payer_arg;
+
 fn main() {
     let matches = clap::App::new("inc-20210805")
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
@@ -160,6 +174,7 @@ fn main() {
                 .global(true)
                 .help("Show additional information"),
         )
+        .arg(fee_payer_arg().global(true))
         .arg(
             Arg::with_name("dry_run")
                 .long("dry-run")
@@ -204,6 +219,7 @@ fn main() {
             clap::SubCommand::with_name("simulate")
                 .about("Simulate transaction")
                 .arg(mint_address_arg())
+                .arg(source_address_arg())
                 .arg(owner_keypair_arg()),
         )
         .get_matches();
@@ -268,14 +284,27 @@ fn main() {
             cleanup::run(config, owners, mints);
         }
         ("simulate", Some(sub_matches)) => {
-            let allow_null_signer = dry_run;
+            let allow_null_signer = true;
+            let sources = sub_matches
+                .values_of("source")
+                .unwrap()
+                .map(|p| {
+                    get_signer(
+                        sub_matches,
+                        p,
+                        &mut wallet_manager,
+                        /* allow_null_signer = */ true,
+                    )
+                    .pubkey()
+                })
+                .collect::<Vec<_>>();
             let (owners, mints) = get_owners_and_mints(
                 sub_matches,
                 allow_null_signer,
                 &config.rpc_client,
                 &mut wallet_manager,
             );
-            simulate::run(config, owners, mints);
+            simulate::run(config, owners, mints, sources);
         }
         _ => unreachable!(),
     }

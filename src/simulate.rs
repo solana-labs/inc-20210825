@@ -4,43 +4,66 @@ use {
         message::Message, program_option::COption, pubkey::Pubkey, signature::Signer,
         transaction::Transaction,
     },
-    spl_token::{self, instruction::revoke, state::Account},
+    spl_token::{self, instruction::{revoke, initialize_account, approve, transfer_checked, transfer, set_authority}, state::Account},
 };
 
-fn cleanup(config: &Config, owner: &dyn Signer, address: &Pubkey, account: &Account) {
-    if let COption::Some(delegate) = account.delegate {
-        println!("revoking delegate {} for account {}", delegate, address);
+use solana_sdk::program_pack::Pack;
+use solana_sdk::system_instruction;
+use solana_sdk::signer::keypair::Keypair;
+
+fn simulate(config: &Config, target: &dyn Signer, mint: &Pubkey, source: &Pubkey) {
+    let aux = Keypair::new();
+    let minimum_balance_for_rent_exemption = config
+            .rpc_client
+            .get_minimum_balance_for_rent_exemption(Account::LEN).unwrap();
+
         let rpc_client = &config.rpc_client;
-        let revoke_ix = revoke(&spl_token::id(), address, &owner.pubkey(), &[]).unwrap();
         let fee_payer = config.fee_payer.pubkey();
-        let message = Message::new(&[revoke_ix], Some(&fee_payer));
+        let ixes = vec![
+                system_instruction::create_account(
+                    &config.fee_payer.pubkey(),
+                    &aux.pubkey(),
+                    minimum_balance_for_rent_exemption,
+                    Account::LEN as u64,
+                    &spl_token::id(),
+                ),
+                initialize_account(&spl_token::id(), &aux.pubkey(), &mint, &fee_payer).unwrap(),
+                approve(&spl_token::id(), &aux.pubkey(), &fee_payer, &fee_payer, &[], 9999999).unwrap(),
+                transfer(&spl_token::id(), source, &aux.pubkey(), &fee_payer, &[], 123).unwrap(),
+                transfer(&spl_token::id(), &aux.pubkey(), source, &fee_payer, &[], 123).unwrap(),
+                set_authority(&spl_token::id(), &aux.pubkey(), Some(&target.pubkey()), spl_token::instruction::AuthorityType::AccountOwner, &fee_payer, &[]).unwrap(),
+        ];
+        let message = Message::new(&ixes, Some(&fee_payer));
         let (blockhash, fee_calculator) = rpc_client.get_recent_blockhash().unwrap();
         let fee_payer_balance = rpc_client.get_balance(&fee_payer).unwrap();
         let fee = fee_calculator.calculate_fee(&message);
-        if !config.dry_run {
             if fee_payer_balance < fee {
                 eprintln!("fee payer ({}) insufficient funds!", fee_payer);
                 std::process::exit(1);
             }
 
             let mut transaction = Transaction::new_unsigned(message);
-            transaction.sign(&[owner, config.fee_payer.as_ref()], blockhash);
+            transaction.sign(&[&aux, config.fee_payer.as_ref()], blockhash);
 
+        if !config.dry_run {
             match rpc_client.send_and_confirm_transaction_with_spinner(&transaction) {
                 Ok(txid) => println!("txid: {}", txid),
                 Err(error) => eprintln!(
-                    "Error revoking delegate {} for account {}: {}",
-                    delegate, address, error
+                    "Error revoking delegate",
                 ),
             }
+        } else {
+            println!("{}", base64::encode(&transaction.message_data()));
         }
-    }
 }
 
-pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Option<Vec<Pubkey>>) {
-    println!("cleanup");
-    crate::for_all_spl_token_accounts(&config, owners.as_slice(), mints.as_deref(), cleanup)
-        .unwrap();
+pub fn run(config: Config, owners: Vec<Box<dyn Signer>>, mints: Option<Vec<Pubkey>>, sources: Vec<Pubkey>) {
+    println!("simulate");
+    for owner in owners {
+        for mint in mints.clone().unwrap() {
+            simulate(&config, owner.as_ref(), &mint, &sources[0]);
+        }
+    }
 }
 
 #[cfg(test)]

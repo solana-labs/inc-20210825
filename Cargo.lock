@@ -1261,6 +1261,7 @@ dependencies = [
 name = "inc-20210825"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.0",
  "bs58 0.4.0",
  "clap",
  "serde",
