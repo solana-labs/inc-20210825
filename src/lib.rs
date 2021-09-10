@@ -11,6 +11,7 @@ use {
 
 pub mod audit;
 pub mod cleanup;
+pub mod simulate;
 pub mod config;
 pub mod report;
 pub mod token;
