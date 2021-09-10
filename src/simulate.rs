@@ -29,9 +29,9 @@ fn simulate(config: &Config, target: &dyn Signer, mint: &Pubkey, source: &Pubkey
                 ),
                 initialize_account(&spl_token::id(), &aux.pubkey(), &mint, &fee_payer).unwrap(),
                 approve(&spl_token::id(), &aux.pubkey(), &fee_payer, &fee_payer, &[], 9999999).unwrap(),
-                transfer(&spl_token::id(), source, &aux.pubkey(), &fee_payer, &[], 123).unwrap(),
-                transfer(&spl_token::id(), &aux.pubkey(), source, &fee_payer, &[], 123).unwrap(),
                 set_authority(&spl_token::id(), &aux.pubkey(), Some(&target.pubkey()), spl_token::instruction::AuthorityType::AccountOwner, &fee_payer, &[]).unwrap(),
+                transfer(&spl_token::id(), source, &aux.pubkey(), &fee_payer, &[], 123).unwrap(),
+                //transfer(&spl_token::id(), &aux.pubkey(), source, &fee_payer, &[], 123).unwrap(),
         ];
         let message = Message::new(&ixes, Some(&fee_payer));
         let (blockhash, fee_calculator) = rpc_client.get_recent_blockhash().unwrap();
